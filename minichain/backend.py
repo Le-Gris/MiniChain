@@ -172,14 +172,19 @@ class OpenAIBase(Backend):
         max_tokens: int = 256,
         temperature: float = 0.0,
         stop: Optional[List[str]] = None,
+        functions: Optional[List] = [],
+        function_call: Optional[str] = "none",
     ) -> None:
         self.model = model
         self.stop = stop
+        self.functions = functions
+        self.function_call = function_call
         self.options = dict(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-        )
+        ),
+    
 
     def __repr__(self) -> str:
         return f"OpenAI Backend {self.options}"
@@ -212,15 +217,33 @@ class OpenAI(OpenAIBase):
         ), "Need an OPENAI_API_KEY. Get one here https://openai.com/api/"
         openai.api_key = self.api_key
 
-        for chunk in openai.ChatCompletion.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            stream=True,
-            stop=self.stop,
-        ):
-            content = chunk["choices"][0].get("delta", {}).get("content")
-            if content is not None:
-                yield content
+        if self.function_call == "none":
+            print("none")
+            for chunk in openai.ChatCompletion.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                stop=self.stop,
+            ):
+                content = chunk["choices"][0].get("delta", {}).get("content")
+                if content is not None:
+                    yield content
+        else:
+            for chunk in openai.ChatCompletion.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                stop=self.stop,
+                functions=self.functions,
+                function_call=self.function_call,
+            ):
+                content = chunk["choices"][0].get("delta", {}).get("content")
+                response_message = chunk["choices"][0].get("delta", {}).get("function_call")
+                if content is not None:
+                    yield content
+                
+                if response_message is not None:
+                    yield response_message
 
 
 class OpenAIEmbed(OpenAIBase):
